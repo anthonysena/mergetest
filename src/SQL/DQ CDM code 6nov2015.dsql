@@ -1,0 +1,328 @@
+
+/*
+example queries:
+
+select top 100 *
+from dqcdm.measure;
+
+select top 100 *
+from dqcdm.dimension_set;
+
+select top 100 *
+from dqcdm.result;
+
+--denormalized version
+select top 100 m.name as measure_name, r.result_name, ds.dim_name_1, ds.dim_value_1, ds.dim_name_2, ds.dim_value_2,ds.dim_name_3, ds.dim_value_3,ds.dim_name_4, ds.dim_value_4,ds.dim_name_5, ds.dim_value_5,ds.dim_name_6, ds.dim_value_6,
+	 r.value
+from dqcdm.result r
+	inner join dqcdm.measure m
+	on r.measure_id = m.measure_id
+	inner join dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+;
+*/
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_truven_ccae_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_truven_ccae_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_truven_ccae_v5.dqcdm.dimension_set;
+
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_truven_mdcr_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_truven_mdcr_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_truven_mdcr_v5.dqcdm.dimension_set;
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_truven_mdcd_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_truven_mdcd_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_truven_mdcd_v5.dqcdm.dimension_set;
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_optum_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_optum_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_optum_v5.dqcdm.dimension_set;
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_cprd_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_cprd_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_cprd_v5.dqcdm.dimension_set;
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_jmdc_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_jmdc_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_jmdc_v5.dqcdm.dimension_set;
+
+CREATE CLUSTERED COLUMNSTORE INDEX idx_result ON cdm_premier_v5.dqcdm.result;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_measure ON cdm_premier_v5.dqcdm.measure;
+CREATE CLUSTERED COLUMNSTORE INDEX idx_dimension_set ON cdm_premier_v5.dqcdm.dimension_set;
+
+
+
+--source name, concept_id, concept_name, domain_id, time_period, prevalence
+drop table scratch.dbo.dqcdm_temporal_summary ;
+create table scratch.dbo.dqcdm_temporal_summary  WITH
+   ( DISTRIBUTION = hash(concept_id) ) as
+select source_name, measure_id, concept_id, concept_name, domain_id, time_period, prevalence
+from
+(
+select 'Truven CCAE' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_truven_ccae_v5.dqcdm.result r
+	inner join cdm_truven_ccae_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_truven_ccae_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_truven_ccae_v5.dqcdm.result r
+				inner join cdm_truven_ccae_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_truven_ccae_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+union
+--mdcr
+select 'Truven MDCR' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_truven_mdcr_v5.dqcdm.result r
+	inner join cdm_truven_mdcr_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_truven_mdcr_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_truven_mdcr_v5.dqcdm.result r
+				inner join cdm_truven_mdcr_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_truven_mdcr_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+
+union
+--mdcd
+select 'Truven MDCD' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_truven_MDCD_v5.dqcdm.result r
+	inner join cdm_truven_MDCD_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_truven_MDCD_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_truven_MDCD_v5.dqcdm.result r
+				inner join cdm_truven_MDCD_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_truven_MDCD_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+union
+--optum
+select 'Optum' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_optum_v5.dqcdm.result r
+	inner join cdm_optum_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_optum_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_optum_v5.dqcdm.result r
+				inner join cdm_optum_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_optum_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+union
+--jmdc
+select 'JMDC' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_jmdc_v5.dqcdm.result r
+	inner join cdm_jmdc_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_jmdc_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_jmdc_v5.dqcdm.result r
+				inner join cdm_jmdc_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_jmdc_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+union
+--cprd
+select 'CPRD' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_cprd_v5.dqcdm.result r
+	inner join cdm_cprd_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_cprd_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_cprd_v5.dqcdm.result r
+				inner join cdm_cprd_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_cprd_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+
+union
+--premier
+select 'premier' as source_name,
+	r.measure_id,
+	ds.dim_value_1 as concept_id,
+	c.concept_name,
+	c.domain_id,
+	ds.dim_value_2 as time_period,
+	1.0*r.value/denom.value as prevalence
+from cdm_premier_v5.dqcdm.result r
+	inner join cdm_premier_v5.dqcdm.dimension_set ds
+	on r.set_id = ds.set_id
+	inner join cdm_premier_v5.dbo.concept c
+	on ds.dim_value_1 = cast(c.concept_id as varchar)
+	inner join
+			(select dim_value_1 as calendar_month,
+				r.value
+				from cdm_premier_v5.dqcdm.result r
+				inner join cdm_premier_v5.dqcdm.measure m
+				on r.measure_id = m.measure_id
+				inner join cdm_premier_v5.dqcdm.dimension_set ds
+				on r.set_id = ds.set_id
+				where r.measure_id = 117  --persons with >1d observation per month
+			) denom
+		on ds.dim_value_2 = denom.calendar_month
+where r.measure_id in (
+	202, --visit
+	402, --condition
+	602, --procedures
+	702, --drug exposure
+	802, --observation
+	902,  --drug era
+	1002  --condition era
+	)
+and r.value > 5  --minimum cell count
+
+
+
+
+
+
+) t1
+;
+
